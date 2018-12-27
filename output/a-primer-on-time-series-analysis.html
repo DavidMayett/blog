@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns# fb: https://www.facebook.com/2008/fbml">
+<head>
+    <title>A Primer on Time Series Analysis - The Data Inquirer</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="./a-primer-on-time-series-analysis.html">
+
+        <meta name="author" content="David Mayett" />
+        <meta name="keywords" content="Python" />
+        <meta name="description" content="We are constantly surrounded by time series data, from daily market returns to the hundreds of millions of tweets uploaded each day. These time series always contain a plethora of signals to be mined for various applications. In this short post, I will go over some basic methods employed to detect events in noisy time series data..." />
+
+        <meta property="og:site_name" content="The Data Inquirer" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="A Primer on Time Series Analysis"/>
+        <meta property="og:url" content="./a-primer-on-time-series-analysis.html"/>
+        <meta property="og:description" content="We are constantly surrounded by time series data, from daily market returns to the hundreds of millions of tweets uploaded each day. These time series always contain a plethora of signals to be mined for various applications. In this short post, I will go over some basic methods employed to detect events in noisy time series data..."/>
+        <meta property="article:published_time" content="2018-12-26" />
+            <meta property="article:section" content="Time Series Analysis" />
+            <meta property="article:tag" content="Python" />
+            <meta property="article:author" content="David Mayett" />
+
+
+
+    <!-- Bootstrap -->
+        <link rel="stylesheet" href="./theme/css/bootstrap.min.css" type="text/css"/>
+    <link href="./theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <link href="./theme/css/pygments/emacs.css" rel="stylesheet">
+    <link rel="stylesheet" href="./theme/css/style.css" type="text/css"/>
+
+
+
+
+
+</head>
+<body>
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="./" class="navbar-brand">
+The Data Inquirer            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+                        <li class="active">
+                            <a href="./category/time-series-analysis.html">Time series analysis</a>
+                        </li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+
+<!-- Banner -->
+<style>
+	#banner{
+	    background-image:url("./images/banner.jpg");
+	}
+</style>
+
+<div id="banner">
+	<div class="container">
+		<div class="copy">
+			<h1>The Data Inquirer</h1>
+		</div>
+	</div>
+</div><!-- End Banner -->
+
+<!-- Content Container -->
+<div class="container">
+    <div class="row">
+        <div class="col-sm-9">
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="./a-primer-on-time-series-analysis.html"
+                       rel="bookmark"
+                       title="Permalink to A Primer on Time Series Analysis">
+                        A Primer on Time Series Analysis
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+    <span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2018-12-26T10:20:00-08:00"> Wed 26 December 2018</time>
+    </span>
+
+
+
+
+
+<span class="label label-default">Tags</span>
+	<a href="./tag/python.html">Python</a>
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>We are constantly surrounded by time series data, from daily market returns to the hundreds of millions of 
+tweets uploaded each day. These time series always contain a plethora of signals to be mined for various 
+applications. In this short post, I will go over some basic methods employed to detect events in noisy 
+time series data. The data I will use corresponds to daily Uber pick-ups from ranging from January 1st 
+2015 to June 30th 2015 and it can be found <a href="https://github.com/fivethirtyeight/uber-tlc-foil-response">here</a>.</p>
+<div class="highlight"><pre><span></span><span class="o">%</span><span class="n">load_ext</span> <span class="n">autoreload</span>
+<span class="o">%</span><span class="n">autoreload</span> <span class="mi">2</span>
+
+<span class="o">%</span><span class="n">matplotlib</span> <span class="n">inline</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="s2">&quot;WARN&quot;</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="kn">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="kn">as</span> <span class="nn">sns</span>
+
+
+<span class="kn">import</span> <span class="nn">timeseries_utils</span> <span class="kn">as</span> <span class="nn">ts</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;bmh&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.figsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;~/Downloads/uber-raw-data-janjune-15.csv&#39;</span><span class="p">,</span><span class="n">usecols</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Pickup_date&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<p>Let's convert Pickup_date to a datetime object, set it as index and aggregate by hour buckets.</p>
+<div class="highlight"><pre><span></span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;Pickup_date&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;Pickup_date&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="s1">&#39;H&#39;</span><span class="p">)</span>
+<span class="n">data</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;Pickup_date&#39;</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;Pickup_date&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>total_pickups</th>
+    </tr>
+    <tr>
+      <th>Pickup_date</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2015-01-01 00:00:00</th>
+      <td>6465</td>
+    </tr>
+    <tr>
+      <th>2015-01-01 01:00:00</th>
+      <td>6001</td>
+    </tr>
+    <tr>
+      <th>2015-01-01 02:00:00</th>
+      <td>7171</td>
+    </tr>
+    <tr>
+      <th>2015-01-01 03:00:00</th>
+      <td>5874</td>
+    </tr>
+    <tr>
+      <th>2015-01-01 04:00:00</th>
+      <td>3529</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>Let's reindex the dataframe to have a uniformly sampled dataset</p>
+<div class="highlight"><pre><span></span><span class="n">idx</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="n">end</span><span class="o">=</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">freq</span><span class="o">=</span><span class="s1">&#39;H&#39;</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
+</pre></div>
+
+
+<p>For simplicity, since there are only 10 missing values, we'll use pandas bfill method</p>
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">isnull</span><span class="p">()]</span>
+</pre></div>
+
+
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>total_pickups</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2015-01-26 23:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 00:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 01:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 02:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 03:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 04:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 05:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 06:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-01-27 07:00:00</th>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2015-03-08 02:00:00</th>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;bfill&#39;</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Before we begin with the analysis, it's always a good idea to visualize the data and get some summary statistics</p>
+<div class="highlight"><pre><span></span><span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s2">&quot;Total uber rides: {df.sum()}&quot;</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s2">&quot;Hourly pickups summary</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+<span class="n">df</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Hourly Counts of Uber pick-ups&quot;</span><span class="p">);</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span>Total uber rides: total_pickups    14275210.0
+dtype: float64
+Hourly pickups summary
+
+       total_pickups
+count    4344.000000
+mean     3286.190147
+std      1820.438156
+min       159.000000
+25%      1879.000000
+50%      3178.500000
+75%      4475.500000
+max     10647.000000
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_13_1.png"></p>
+<div class="highlight"><pre><span></span><span class="n">ax</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Hourly Counts of Uber pick-ups&quot;</span><span class="p">);</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_figure</span><span class="p">()</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s1">&#39;Hourly_counts.png&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_14_0.png"></p>
+<p>As one would expect, the data is periodic. The max number of hourly pick-ups ~10500 and the min is about 160, while we have a total of over 14 million pick-ups!
+Given this behavior, it difficult to pick-out any trends or outliers. To get a better sense of the distribution, let's plot a histogram and a boxplot</p>
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">bins</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Histogram of hourly pick-ups&quot;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_16_0.png"></p>
+<div class="highlight"><pre><span></span><span class="n">sns</span><span class="o">.</span><span class="n">catplot</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">,</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;box&#39;</span><span class="p">,</span><span class="n">data</span><span class="o">=</span><span class="n">df</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_17_0.png"></p>
+<p>As one may expect, the data is not normal and it is highly skewed. In the sections below, we'll examine a few standard techniques for standardizing data as well as for event detection</p>
+<h1>Data Preprocessing and Analysis</h1>
+<p>We'll discuss 4 main areas of time series analyis:</p>
+<ol>
+<li>Standardizing</li>
+<li>Time series decomposition - additive and multiplicative decomposition</li>
+<li>Detecting Seasonality - Discrete Fourier Transform</li>
+<li>Trend removal - rolling mean/median</li>
+</ol>
+<p>At the end, all the above methods will be combined to implement a simple event detection algorithm</p>
+<h1>Standardize</h1>
+<p>It is generally good practice and useful to rescale the data in such a way to have zero-mean and unit variance, i.e. in units of z-scores. This is easily accomplished by subtracting the mean and dividing by the standard deviance. Pandas makes this a breeze.</p>
+<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">normalize</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Rescales dataframe in z-score units</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">df</span><span class="o">-</span><span class="n">df</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span><span class="o">/</span><span class="n">df</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Standardized hourly counts of uber pickups&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_24_0.png"></p>
+<p>Aside from the obvious periodicity, we can also discern a subtle upward trend.</p>
+<h1>Time series Decomposition</h1>
+<p>A common way to analyze time series is to make an assumption about the underlying process. For instance, in ordinary least squares, one assumes the dependent variable depends linearly on the independent variable plus some noise:</p>
+<div class="math">\begin{equation}
+y_{i} = \sum_{ij}x_{ij}\beta_{j} + \varepsilon_{i}
+\end{equation}</div>
+<p>Time series decomposition is a procedure that aims to separate a time series into its constituents. The original time series is normally decomposed into three parts: trend, seasonality, and noise. Furthermore, the more common ways to decompose the time series are respectively additive and multiplicative:</p>
+<div class="math">\begin{eqnarray}
+    y_t &amp;=&amp; S_t + T_t + \varepsilon_t \\
+    y_t &amp;=&amp; S_t\times T_t\times\varepsilon_t
+\end{eqnarray}</div>
+<p>For the remaining of this analysis, we'll assume that the time series can be additively decomposed.</p>
+<h1>Detecting Seasonality</h1>
+<p>The first step to decompose our time series is the detection and removal of the underlying seasonality, i.e. periodicity. By looking at counts vs. time plot, we can get an idea of what this periocity should be. However, we will make this more formal by calculating it via the discrete Fourier transform.</p>
+<p>Let's plot the hourly counts for the first 100 hours.</p>
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">200</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;First 100 hours of re-scaled counts of uber pick-ups&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_28_0.png"></p>
+<p>It looks like the period is about one day. Let's confirm this is consistent throughout the data.</p>
+<p>The Fourier transform is defined as:
+</p>
+<div class="math">\begin{equation}
+d(\omega_{j}) = \frac{1}{\sqrt{N}}\sum_{t=1}^{N}x_{t}e^{-2i\pi\omega_{j}t},
+\end{equation}</div>
+<p>for <span class="math">\(j\in \mathbb{Z}\)</span>, where <span class="math">\(\omega_{j} = j/N\)</span> are called the fundamental frequencies. We can now calculate the distribution of power into frequency components of the signal. In other words, we shall compute the spectral density, since we only have a finite sample of the signal, this is usually referred to as <em>periodogram</em>, defined as:</p>
+<div class="math">\begin{equation}
+I(\omega_{j}) = \left|d\left(\omega_{j}\right)\right|^{2}.
+\end{equation}</div>
+<div class="highlight"><pre><span></span><span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">rfft</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">],</span><span class="n">norm</span><span class="o">=</span><span class="s1">&#39;ortho&#39;</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">d</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">f</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">rfftfreq</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">f</span><span class="p">,</span><span class="n">p</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Periodogram of uber pickups&quot;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_33_0.png"></p>
+<p>We can now find the seasonality period by finding where peaks in the plot above happen.</p>
+<div class="highlight"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">p</span><span class="p">)]</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">t</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="n">s</span>
+<span class="k">print</span><span class="p">(</span><span class="s2">&quot;Length of seasonality </span><span class="si">%.2f</span><span class="s2"> hours&quot;</span> <span class="o">%</span> <span class="n">t</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span>Length of seasonality 24.00 hours
+</pre></div>
+
+
+<p>As expected the data displays a seasonal pattern of approximately 24 hours.</p>
+<h1>Detecting Trend</h1>
+<p>One of the most common methods to detect and remove the trend component of a time series is the moving average of a fixed size window. This can be viewed as a one-dimensional convolution operator with a kernel of length <span class="math">\(m\)</span>, with <span class="math">\(m\)</span> being the size of the window. The moving average will effectively smooth out our signal. It's generally important to use a window size equal to the seasonality component.</p>
+<p>Let's take a look at our signal with a window of size 24.</p>
+<div class="highlight"><pre><span></span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">24</span><span class="p">,</span><span class="n">center</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Moving average of uber pickups&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_39_0.png"></p>
+<h1>Combine transformations</h1>
+<p>We can now combine the methods described above and use them to detect anomalies. I wrote a couple of utility functions that can be used for trend and seasonality extraction that can be found here.</p>
+<div class="highlight"><pre><span></span><span class="n">seasonal</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">get_seasonality</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">],</span><span class="mi">24</span><span class="p">)</span>
+<span class="n">seasonal</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">idx</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">seasonal</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Seasonal component of uber pickups&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_42_0.png"></p>
+<div class="highlight"><pre><span></span><span class="n">trend</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">get_trend</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">],</span><span class="mi">24</span><span class="p">,</span><span class="bp">False</span><span class="p">)</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">trend</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Trend component of uber pickups&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_44_0.png"></p>
+<div class="highlight"><pre><span></span><span class="n">decomp</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;total_pickups&#39;</span><span class="p">][</span><span class="mi">23</span><span class="p">:]</span> <span class="o">-</span> <span class="n">trend</span><span class="p">[</span><span class="mi">23</span><span class="p">:]</span> <span class="o">-</span> <span class="n">seasonal</span><span class="p">[</span><span class="mi">23</span><span class="p">:]</span>
+</pre></div>
+
+
+<p>We can now detect anomalies by looking at events that are <span class="math">\(n\)</span> times larger than the standard deviation. Tuning this parameter will depend on how susceptible to false positives/false negatives we wish to be. In the plots, we show two scenarios for events detected where a given value <span class="math">\(x\)</span> is 3 or 4 standard deviations above or below the mean value.</p>
+<div class="highlight"><pre><span></span><span class="n">ub_3s</span> <span class="o">=</span> <span class="n">decomp</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span> <span class="o">+</span> <span class="mi">3</span><span class="o">*</span><span class="n">decomp</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+<span class="n">lb_3s</span> <span class="o">=</span> <span class="n">decomp</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span> <span class="o">-</span> <span class="mi">3</span><span class="o">*</span><span class="n">decomp</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="n">decomp</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">)</span>
+<span class="n">decomp</span><span class="p">[(</span><span class="n">decomp</span><span class="o">&gt;=</span><span class="n">ub_3s</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">decomp</span> <span class="o">&lt;=</span><span class="n">lb_3s</span><span class="p">)]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;line&#39;</span><span class="p">,</span><span class="n">style</span><span class="o">=</span><span class="s1">&#39;yo&#39;</span><span class="p">,</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Events detected at 3$\sigma$&#39;</span><span class="p">);</span>
+</pre></div>
+
+
+<p><img alt="png" src="Primer%20on%20Time%20series%20analysis_files/Primer%20on%20Time%20series%20analysis_48_0.png"></p>
+<script type="text/javascript">if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width < 768) ? "left" : align;
+        indent = (screen.width < 768) ? "0em" : indent;
+        linebreak = (screen.width < 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+    mathjaxscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+</script>
+            </div>
+            <!-- /.entry-content -->
+    <hr />
+    <!-- AddThis Button BEGIN -->
+    <div class="addthis_toolbox addthis_default_style">
+            <a class="addthis_button_facebook_like" fb:like:layout="button_count"></a>
+            <a class="addthis_button_tweet"></a>
+            <a class="addthis_button_google_plusone" g:plusone:size="medium"></a>
+    </div>
+    <!-- AddThis Button END -->
+        </article>
+    </section>
+
+        </div>
+        <div class="col-sm-3" id="sidebar">
+            <aside>
+<div id="aboutme">
+    <p>
+      <strong>About David Mayett</strong><br/>
+        Former: Theoretical Physicist, Quant Researcher at Highland Technology Partners. 
+              I currently work on ML/AI applied to natural language and computer vision at
+              Hoodline. I enjoy finding insights in messy data and making cool visualizations.
+    </p>
+</div><!-- Sidebar -->
+<section class="well well-sm">
+  <ul class="list-group list-group-flush">
+
+<!-- Sidebar/Social -->
+<li class="list-group-item">
+  <h4><i class="fa fa-home fa-lg"></i><span class="icon-label">Social</span></h4>
+  <ul class="list-group" id="social">
+    <li class="list-group-item"><a href="https://twitter.com/davidmayett"><i class="fa fa-twitter-square fa-lg"></i> twitter</a></li>
+    <li class="list-group-item"><a href="https://github.com/DavidMayett"><i class="fa fa-github-square fa-lg"></i> github</a></li>
+    <li class="list-group-item"><a href="https://www.linkedin.com/in/dmayett/"><i class="fa fa-linkedin-square fa-lg"></i> linkedin</a></li>
+    <li class="list-group-item"><a href="https://www.facebook.com/dmayett"><i class="fa fa-facebook-square fa-lg"></i> facebook</a></li>
+    <li class="list-group-item"><a href="https://www.instagram.com/dmayett/"><i class="fa fa-instagram fa-lg"></i> instagram</a></li>
+  </ul>
+</li>
+<!-- End Sidebar/Social -->
+
+<!-- Sidebar/Recent Posts -->
+<li class="list-group-item">
+  <h4><i class="fa fa-home fa-lg"></i><span class="icon-label">Recent Posts</span></h4>
+  <ul class="list-group" id="recentposts">
+    <li class="list-group-item"><a href="./a-primer-on-time-series-analysis.html">A Primer on Time Series Analysis</a></li>
+  </ul>
+</li>
+<!-- End Sidebar/Recent Posts -->
+  </ul>
+</section>
+<!-- End Sidebar -->            </aside>
+        </div>
+    </div>
+</div>
+<!-- End Content Container -->
+
+<footer>
+   <div class="container">
+      <hr>
+      <div class="row">
+         <div class="col-xs-10">&copy; 2018 David Mayett
+            &middot; Powered by <a href="https://github.com/getpelican/pelican-themes/tree/master/pelican-bootstrap3" target="_blank">pelican-bootstrap3</a>,
+            <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>,
+            <a href="http://getbootstrap.com" target="_blank">Bootstrap</a>         </div>
+         <div class="col-xs-2"><p class="pull-right"><i class="fa fa-arrow-up"></i> <a href="#">Back to top</a></p></div>
+      </div>
+   </div>
+</footer>
+<script src="./theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="./theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="./theme/js/respond.min.js"></script>
+
+
+    <script src="./theme/js/bodypadding.js"></script>
+
+
+        <script type="text/javascript">var addthis_config = {"data_track_addressbar": true};</script>
+    <script type="text/javascript" src="//s7.addthis.com/js/300/addthis_widget.js#pubid=ra-5c21b632a5222846"></script>
+</body>
+</html>

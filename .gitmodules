@@ -1,0 +1,4 @@
+[submodule "output"]
+	path = output
+	url = https://github.com/DavidMayett/DavidMayett.github.io.git
+	ignore = all
